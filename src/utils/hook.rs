@@ -1,10 +1,11 @@
+use crate::utils::ids::IdGenerator;
 use std::sync::Arc;
 
-crate::utils::ids::id_gen!(hooks_id);
+static HOOK_ID_GEN: IdGenerator = IdGenerator::new();
 
 /// Unique hook identifier used to unregister commit/descruction hooks
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct HookId(Arc<InnerId>);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct HookId(u64);
 
 pub(crate) struct Hook<T: ?Sized> {
     pub id: HookId,
@@ -22,7 +23,7 @@ impl<T: ?Sized> std::fmt::Debug for Hook<T> {
 impl<T: ?Sized> Clone for Hook<T> {
     fn clone(&self) -> Self {
         Self {
-            id: self.id.clone(),
+            id: self.id,
             cb: self.cb.clone(),
         }
     }
@@ -31,23 +32,8 @@ impl<T: ?Sized> Clone for Hook<T> {
 impl<T: ?Sized> Hook<T> {
     pub fn new(cb: Arc<T>) -> Self {
         Self {
-            id: HookId(Arc::new(InnerId::new())),
+            id: HookId(HOOK_ID_GEN.next()),
             cb,
         }
-    }
-}
-
-#[derive(Debug, Eq, PartialEq)]
-struct InnerId(usize);
-
-impl InnerId {
-    fn new() -> Self {
-        Self(hooks_id::next())
-    }
-}
-
-impl Drop for InnerId {
-    fn drop(&mut self) {
-        hooks_id::remove(self.0);
     }
 }

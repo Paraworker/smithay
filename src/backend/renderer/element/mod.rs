@@ -26,7 +26,7 @@ use wayland_server::{backend::ObjectId, Resource};
 
 use crate::{
     output::{Output, WeakOutput},
-    utils::{Buffer as BufferCoords, Physical, Point, Rectangle, Scale, Transform},
+    utils::{ids::IdGenerator, Buffer as BufferCoords, Physical, Point, Rectangle, Scale, Transform},
 };
 
 #[cfg(feature = "wayland_frontend")]
@@ -43,7 +43,7 @@ pub mod surface;
 pub mod texture;
 pub mod utils;
 
-crate::utils::ids::id_gen!(external_id);
+static EXTERNAL_ID_GEN: IdGenerator = IdGenerator::new();
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 /// A unique id for a [`RenderElement`]
@@ -53,22 +53,7 @@ pub struct Id(InnerId);
 enum InnerId {
     #[cfg(feature = "wayland_frontend")]
     WaylandResource(ObjectId),
-    External(Arc<ExternalId>),
-}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-struct ExternalId(usize);
-
-impl ExternalId {
-    fn new() -> Self {
-        ExternalId(external_id::next())
-    }
-}
-
-impl Drop for ExternalId {
-    fn drop(&mut self) {
-        external_id::remove(self.0);
-    }
+    External(u64),
 }
 
 impl Id {
@@ -82,11 +67,8 @@ impl Id {
     }
 
     /// Create a new unique id
-    ///
-    /// Note: The id will be re-used once all instances of this [`Id`]
-    /// are dropped.
     pub fn new() -> Self {
-        Id(InnerId::External(Arc::new(ExternalId::new())))
+        Id(InnerId::External(EXTERNAL_ID_GEN.next()))
     }
 }
 
@@ -139,7 +121,7 @@ pub enum RenderElementPresentationState {
 #[derive(Debug, Clone, Copy)]
 pub struct RenderElementState {
     /// Holds the physical visible area of the element on the output in pixels.
-    ///  
+    ///
     /// Note: If the presentation_state is [`RenderElementPresentationState::Skipped`] this will be zero.
     pub visible_area: usize,
     /// Holds the presentation state of the element on the output

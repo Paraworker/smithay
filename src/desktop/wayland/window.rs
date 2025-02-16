@@ -3,7 +3,7 @@ use crate::{desktop::space::SpaceElement, xwayland::X11Surface};
 use crate::{
     desktop::{space::RenderZindex, utils::*, PopupManager},
     output::Output,
-    utils::{user_data::UserDataMap, IsAlive, Logical, Point, Rectangle},
+    utils::{ids::IdGenerator, user_data::UserDataMap, IsAlive, Logical, Point, Rectangle},
     wayland::{
         compositor::{with_states, SurfaceData},
         dmabuf::DmabufFeedback,
@@ -25,7 +25,7 @@ use wayland_protocols::{
 };
 use wayland_server::protocol::wl_surface;
 
-crate::utils::ids::id_gen!(window_id);
+static WINDOW_ID_GEN: IdGenerator = IdGenerator::new();
 
 /// Represents the surface of a [`Window`]
 #[derive(Debug)]
@@ -39,17 +39,11 @@ pub enum WindowSurface {
 
 #[derive(Debug)]
 pub(crate) struct WindowInner {
-    pub(crate) id: usize,
+    pub(crate) id: u64,
     surface: WindowSurface,
     bbox: Mutex<Rectangle<i32, Logical>>,
     pub(crate) z_index: AtomicU8,
     user_data: UserDataMap,
-}
-
-impl Drop for WindowInner {
-    fn drop(&mut self) {
-        window_id::remove(self.id);
-    }
 }
 
 /// Represents a single application window
@@ -112,7 +106,7 @@ impl Window {
 
     /// Construct a new [`Window`] from a xdg toplevel surface
     pub fn new_wayland_window(toplevel: ToplevelSurface) -> Window {
-        let id = window_id::next();
+        let id = WINDOW_ID_GEN.next();
 
         Window(Arc::new(WindowInner {
             id,
@@ -126,7 +120,7 @@ impl Window {
     /// Construct a new [`Window`] from an X11 surface
     #[cfg(feature = "xwayland")]
     pub fn new_x11_window(surface: X11Surface) -> Window {
-        let id = window_id::next();
+        let id = WINDOW_ID_GEN.next();
 
         Window(Arc::new(WindowInner {
             id,
