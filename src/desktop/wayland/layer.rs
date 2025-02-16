@@ -1,7 +1,7 @@
 use crate::{
-    desktop::{utils::*, PopupManager},
+    desktop::{utils::*, PopupManager, WindowSurfaceType},
     output::{Output, WeakOutput},
-    utils::{user_data::UserDataMap, IsAlive, Logical, Point, Rectangle},
+    utils::{ids::IdGenerator, user_data::UserDataMap, IsAlive, Logical, Point, Rectangle},
     wayland::{
         compositor::{with_states, with_surface_tree_downward, SurfaceData, TraversalAction},
         dmabuf::DmabufFeedback,
@@ -24,9 +24,7 @@ use std::{
     time::Duration,
 };
 
-use crate::desktop::WindowSurfaceType;
-
-crate::utils::ids::id_gen!(layer_id);
+static LAYER_ID_GEN: IdGenerator = IdGenerator::new();
 
 /// Map of [`LayerSurface`]s on an [`Output`]
 #[derive(Debug)]
@@ -490,17 +488,10 @@ impl Hash for LayerSurface {
 
 #[derive(Debug)]
 pub(crate) struct LayerSurfaceInner {
-    pub(crate) id: usize,
+    pub(crate) id: u64,
     surface: WlrLayerSurface,
     namespace: String,
     userdata: UserDataMap,
-}
-
-impl Drop for LayerSurfaceInner {
-    #[inline]
-    fn drop(&mut self) {
-        layer_id::remove(self.id);
-    }
 }
 
 impl IsAlive for LayerSurface {
@@ -514,7 +505,7 @@ impl LayerSurface {
     /// Create a new [`LayerSurface`] from a given [`WlrLayerSurface`] and its namespace.
     pub fn new(surface: WlrLayerSurface, namespace: String) -> LayerSurface {
         LayerSurface(Arc::new(LayerSurfaceInner {
-            id: layer_id::next(),
+            id: LAYER_ID_GEN.next(),
             surface,
             namespace,
             userdata: UserDataMap::new(),
