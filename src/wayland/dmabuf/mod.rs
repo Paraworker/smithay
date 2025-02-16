@@ -206,7 +206,7 @@ use wayland_protocols::wp::linux_dmabuf::zv1::server::{
 use wayland_server::{
     backend::{GlobalId, InvalidId},
     protocol::{
-        wl_buffer::{self, WlBuffer},
+        wl_buffer::WlBuffer,
         wl_surface::WlSurface,
     },
     Client, Dispatch, DisplayHandle, GlobalDispatch, Resource, WEnum,
@@ -219,10 +219,12 @@ use crate::{
         dmabuf::{Dmabuf, DmabufFlags, Plane},
         Format, Fourcc, Modifier,
     },
-    utils::{ids::id_gen, SealedFile, UnmanagedResource},
+    utils::{ids::IdGenerator, SealedFile, UnmanagedResource},
 };
 
 use super::{buffer::BufferHandler, compositor};
+
+static HANDLE_ID_GEN: IdGenerator = IdGenerator::new();
 
 #[derive(Debug, Clone, PartialEq)]
 struct DmabufFeedbackTranche {
@@ -579,7 +581,7 @@ struct DmabufGlobalState {
 #[derive(Debug)]
 pub struct DmabufState {
     /// Globals managed by the dmabuf handler.
-    globals: HashMap<usize, DmabufGlobalState>,
+    globals: HashMap<DmabufGlobal, DmabufGlobalState>,
 }
 
 impl DmabufState {
@@ -698,7 +700,7 @@ impl DmabufState {
             + 'static,
         F: for<'c> Fn(&'c Client) -> bool + Send + Sync + 'static,
     {
-        let id = global_id::next();
+        let handle = DmabufGlobal(HANDLE_ID_GEN.next());
 
         let formats = formats
             .or_else(|| default_feedback.map(|f| f.main_formats()))
@@ -723,24 +725,24 @@ impl DmabufState {
         let default_feedback = default_feedback.map(|f| Arc::new(Mutex::new(f.clone())));
 
         let data = DmabufGlobalData {
+            handle,
             filter: Box::new(filter),
             formats,
             default_feedback: default_feedback.clone(),
             known_default_feedbacks: known_default_feedbacks.clone(),
-            id,
         };
 
-        let global = display.create_global::<D, zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1, _>(version, data);
+        let global_id = display.create_global::<D, zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1, _>(version, data);
         self.globals.insert(
-            id,
+            handle,
             DmabufGlobalState {
-                id: global,
+                id: global_id,
                 default_feedback,
                 known_default_feedbacks,
             },
         );
 
-        DmabufGlobal { id }
+        handle
     }
 
     /// Set the default [`DmabufFeedback`] for the specified global and send it to
@@ -749,7 +751,7 @@ impl DmabufState {
     /// Note: This will do nothing if the global is not found, the global has been
     /// initialized without feedback or the feedback equals the current default feedback.
     pub fn set_default_feedback(&self, global: &DmabufGlobal, default_feedback: &DmabufFeedback) {
-        let Some(global) = self.globals.get(&global.id) else {
+        let Some(global) = self.globals.get(global) else {
             return;
         };
 
@@ -774,7 +776,7 @@ impl DmabufState {
     ///
     /// This operation is permanent and there is no way to re-enable a global.
     pub fn disable_global<D: 'static>(&mut self, display: &DisplayHandle, global: &DmabufGlobal) {
-        if let Some(global_state) = self.globals.get(&global.id) {
+        if let Some(global_state) = self.globals.get(global) {
             display.disable_global::<D>(global_state.id.clone());
         }
     }
@@ -784,10 +786,8 @@ impl DmabufState {
     /// It is highly recommended you disable the global before destroying it and ensure all child objects have
     /// been destroyed.
     pub fn destroy_global<D: 'static>(&mut self, display: &DisplayHandle, global: DmabufGlobal) {
-        if global_id::remove(global.id) {
-            if let Some(global_state) = self.globals.remove(&global.id) {
-                display.remove_global::<D>(global_state.id);
-            }
+        if let Some(global_state) = self.globals.remove(&global) {
+            display.remove_global::<D>(global_state.id);
         }
     }
 }
@@ -795,19 +795,19 @@ impl DmabufState {
 /// Data associated with a dmabuf global.
 #[allow(missing_debug_implementations)]
 pub struct DmabufGlobalData {
+    handle: DmabufGlobal,
     filter: Box<dyn for<'c> Fn(&'c Client) -> bool + Send + Sync>,
     formats: Arc<IndexMap<Fourcc, IndexSet<Modifier>>>,
     default_feedback: Option<Arc<Mutex<DmabufFeedback>>>,
     known_default_feedbacks:
         Arc<Mutex<Vec<wayland_server::Weak<zwp_linux_dmabuf_feedback_v1::ZwpLinuxDmabufFeedbackV1>>>>,
-    id: usize,
 }
 
 /// Data associated with a dmabuf global protocol object.
 #[derive(Debug)]
 pub struct DmabufData {
+    handle: DmabufGlobal,
     formats: Arc<IndexMap<Fourcc, IndexSet<Modifier>>>,
-    id: usize,
 
     default_feedback: Option<Arc<Mutex<DmabufFeedback>>>,
     known_default_feedbacks:
@@ -819,14 +819,14 @@ pub struct DmabufData {
 pub struct DmabufFeedbackData {
     known_default_feedbacks:
         Arc<Mutex<Vec<wayland_server::Weak<zwp_linux_dmabuf_feedback_v1::ZwpLinuxDmabufFeedbackV1>>>>,
-    surface: Option<wayland_server::Weak<wayland_server::protocol::wl_surface::WlSurface>>,
+    surface: Option<wayland_server::Weak<WlSurface>>,
 }
 
 /// Data associated with a pending [`Dmabuf`] import.
 #[derive(Debug)]
 pub struct DmabufParamsData {
-    /// Id of the dmabuf global these params were created from.
-    id: usize,
+    /// Handle of the dmabuf global these params were created from.
+    handle: DmabufGlobal,
 
     /// Whether the params protocol object has been used before to create a wl_buffer.
     used: AtomicBool,
@@ -840,11 +840,9 @@ pub struct DmabufParamsData {
 
 /// A handle to a registered dmabuf global.
 ///
-/// This type may be used in equitability checks to determine which global a dmabuf is being imported to.
+/// This type may be used in equality checks to determine which global a dmabuf is being imported to.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
-pub struct DmabufGlobal {
-    id: usize,
-}
+pub struct DmabufGlobal(u64);
 
 /// An object to allow asynchronous creation of a [`Dmabuf`] backed [`WlBuffer`].
 ///
@@ -880,8 +878,8 @@ impl ImportNotifier {
     /// This can return [`InvalidId`] if the client the buffer was imported from has died.
     pub fn successful<D>(mut self) -> Result<WlBuffer, InvalidId>
     where
-        D: Dispatch<zwp_linux_buffer_params_v1::ZwpLinuxBufferParamsV1, DmabufParamsData>
-            + Dispatch<wl_buffer::WlBuffer, Dmabuf>
+        D: Dispatch<ZwpLinuxBufferParamsV1, DmabufParamsData>
+            + Dispatch<WlBuffer, Dmabuf>
             + BufferHandler
             + DmabufHandler
             + 'static,
@@ -891,11 +889,8 @@ impl ImportNotifier {
         let result = match self.import {
             Import::Falliable => {
                 if let Some(client) = client {
-                    match client.create_resource::<wl_buffer::WlBuffer, Dmabuf, D>(
-                        &self.display,
-                        1,
-                        self.dmabuf.clone(),
-                    ) {
+                    match client.create_resource::<WlBuffer, Dmabuf, D>(&self.display, 1, self.dmabuf.clone())
+                    {
                         Ok(buffer) => {
                             self.inner.created(&buffer);
                             Ok(buffer)
@@ -1022,11 +1017,11 @@ pub trait DmabufHandler: BufferHandler {
 /// If the buffer is managed by the dmabuf handler, the [`Dmabuf`] is returned.
 ///
 /// If the buffer is not managed by the dmabuf handler (whether the buffer is a different kind of buffer,
-/// such as an shm buffer or is not managed by smithay), this function will return an [`UnmanagedResource`]
+/// such as a shm buffer or is not managed by smithay), this function will return an [`UnmanagedResource`]
 /// error.
 ///
 /// [`WlBuffer`]: wl_buffer::WlBuffer
-pub fn get_dmabuf(buffer: &wl_buffer::WlBuffer) -> Result<&Dmabuf, UnmanagedResource> {
+pub fn get_dmabuf(buffer: &WlBuffer) -> Result<&Dmabuf, UnmanagedResource> {
     buffer.data::<Dmabuf>().ok_or(UnmanagedResource)
 }
 
@@ -1232,5 +1227,3 @@ impl DmabufParamsData {
         Some(dmabuf)
     }
 }
-
-id_gen!(global_id);

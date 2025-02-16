@@ -14,8 +14,8 @@ use crate::{
 };
 
 use super::{
-    DmabufData, DmabufFeedbackData, DmabufGlobal, DmabufGlobalData, DmabufHandler, DmabufParamsData,
-    DmabufState, Import, ImportNotifier, Modifier, SurfaceDmabufFeedbackState,
+    DmabufData, DmabufFeedbackData, DmabufGlobalData, DmabufHandler, DmabufParamsData, DmabufState, Import,
+    ImportNotifier, Modifier, SurfaceDmabufFeedbackState,
 };
 
 impl<D> Dispatch<wl_buffer::WlBuffer, Dmabuf, D> for DmabufState
@@ -69,7 +69,7 @@ where
                 data_init.init(
                     params_id,
                     DmabufParamsData {
-                        id: data.id,
+                        handle: data.handle,
                         used: AtomicBool::new(false),
                         formats: data.formats.clone(),
                         modifier: Mutex::new(None),
@@ -116,7 +116,7 @@ where
                     let feedback_state = states.data_map.get::<SurfaceDmabufFeedbackState>().unwrap();
                     feedback_state.add_instance(&feedback, || {
                         state
-                            .new_surface_feedback(&surface, &DmabufGlobal { id: data.id })
+                            .new_surface_feedback(&surface, &data.handle)
                             .unwrap_or_else(|| {
                                 data.default_feedback.as_ref().unwrap().lock().unwrap().clone()
                             })
@@ -184,8 +184,8 @@ where
         data_init: &mut DataInit<'_, D>,
     ) {
         let data = DmabufData {
+            handle: global_data.handle,
             formats: global_data.formats.clone(),
-            id: global_data.id,
             default_feedback: global_data.default_feedback.clone(),
             known_default_feedbacks: global_data.known_default_feedbacks.clone(),
         };
@@ -302,14 +302,14 @@ where
             } => {
                 // create_dmabuf performs an implicit ensure_unused function call.
                 if let Some(dmabuf) = data.create_dmabuf(params, width, height, format, flags, None) {
-                    if state.dmabuf_state().globals.contains_key(&data.id) {
+                    if state.dmabuf_state().globals.contains_key(&data.handle) {
                         let notifier = ImportNotifier::new(
                             params.clone(),
                             dh.clone(),
                             dmabuf.clone(),
                             Import::Falliable,
                         );
-                        state.dmabuf_imported(&DmabufGlobal { id: data.id }, dmabuf, notifier);
+                        state.dmabuf_imported(&data.handle, dmabuf, notifier);
                     } else {
                         // If the dmabuf global was destroyed, we cannot import any buffers.
                         params.failed();
@@ -327,7 +327,7 @@ where
                 // Client is killed if the if statement is not taken.
                 // create_dmabuf performs an implicit ensure_unused function call.
                 if let Some(dmabuf) = data.create_dmabuf(params, width, height, format, flags, None) {
-                    if state.dmabuf_state().globals.contains_key(&data.id) {
+                    if state.dmabuf_state().globals.contains_key(&data.handle) {
                         // The buffer isn't technically valid during data_init, but the client is not allowed to use the buffer until ready.
                         let buffer = data_init.init(buffer_id, dmabuf.clone());
                         let notifier = ImportNotifier::new(
@@ -336,7 +336,7 @@ where
                             dmabuf.clone(),
                             Import::Infallible(buffer),
                         );
-                        state.dmabuf_imported(&DmabufGlobal { id: data.id }, dmabuf, notifier);
+                        state.dmabuf_imported(&data.handle, dmabuf, notifier);
                     } else {
                         // Buffer import failed. The protocol documentation heavily implies killing the
                         // client is the right thing to do here.

@@ -37,22 +37,21 @@ use super::{
     sync::SyncPoint, Bind, Blit, BlitFrame, Color32F, DebugFlags, ExportMem, Frame, ImportDma, ImportMem,
     Offscreen, Renderer, RendererSuper, Texture, TextureFilter, TextureMapping,
 };
-use crate::backend::{
-    allocator::Buffer,
-    egl::{
-        ffi::egl::{self as ffi_egl, types::EGLImage},
-        EGLContext, EGLSurface, MakeCurrentError,
+use crate::{
+    backend::{
+        allocator::{
+            dmabuf::{Dmabuf, WeakDmabuf},
+            format::{get_bpp, get_opaque, has_alpha, FormatSet},
+            Buffer, Format, Fourcc,
+        },
+        egl::{
+            fence::EGLFence,
+            ffi::egl::{self as ffi_egl, types::EGLImage},
+            EGLContext, EGLSurface, MakeCurrentError,
+        },
     },
+    utils::{ids::IdGenerator, Buffer as BufferCoord, Physical, Rectangle, Size, Transform},
 };
-use crate::backend::{
-    allocator::{
-        dmabuf::{Dmabuf, WeakDmabuf},
-        format::{get_bpp, get_opaque, has_alpha, FormatSet},
-        Format, Fourcc,
-    },
-    egl::fence::EGLFence,
-};
-use crate::utils::{Buffer as BufferCoord, Physical, Rectangle, Size, Transform};
 
 #[cfg(all(feature = "wayland_frontend", feature = "use_system_lib"))]
 use super::ImportEgl;
@@ -70,13 +69,9 @@ pub mod ffi {
     include!(concat!(env!("OUT_DIR"), "/gl_bindings.rs"));
 }
 
-crate::utils::ids::id_gen!(renderer_id);
-struct RendererId(usize);
-impl Drop for RendererId {
-    fn drop(&mut self) {
-        renderer_id::remove(self.0);
-    }
-}
+static RENDERER_ID_GEN: IdGenerator = IdGenerator::new();
+
+struct RendererId(u64);
 
 enum CleanupResource {
     Texture(ffi::types::GLuint),
@@ -617,7 +612,7 @@ impl GlesRenderer {
 
         context
             .user_data()
-            .insert_if_missing_threadsafe(|| RendererId(renderer_id::next()));
+            .insert_if_missing_threadsafe(|| RendererId(RENDERER_ID_GEN.next()));
         drop(_guard);
 
         let renderer = GlesRenderer {
@@ -2019,7 +2014,7 @@ impl RendererSuper for GlesRenderer {
 
 impl Renderer for GlesRenderer {
     fn id(&self) -> usize {
-        self.egl.user_data().get::<RendererId>().unwrap().0
+        self.egl.user_data().get::<RendererId>().unwrap().0 as usize
     }
 
     fn downscale_filter(&mut self, filter: TextureFilter) -> Result<(), Self::Error> {
