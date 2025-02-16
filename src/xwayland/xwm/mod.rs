@@ -83,7 +83,7 @@
 //!             client.clone(),
 //!         )
 //!         .expect("Failed to attach X11 Window Manager");
-//!         
+//!
 //!         // store the WM somewhere
 //!     }
 //!     XWaylandEvent::Error => eprintln!("XWayland failed to start!"),
@@ -92,7 +92,7 @@
 //! ```
 
 use crate::{
-    utils::{x11rb::X11Source, Client, Coordinate, Logical, Point, Rectangle, Size},
+    utils::{ids::IdGenerator, x11rb::X11Source, Client, Coordinate, Logical, Point, Rectangle, Size},
     wayland::{
         selection::SelectionTarget,
         xwayland_shell::{self, XWaylandShellHandler},
@@ -222,12 +222,11 @@ mod atoms {
 pub use self::atoms::Atoms;
 
 use super::XWaylandClientData;
-
-crate::utils::ids::id_gen!(xwm_id);
+static XWM_ID_GEN: IdGenerator = IdGenerator::new();
 
 /// Id of an X11 WM
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct XwmId(usize);
+pub struct XwmId(u64);
 
 /// Window asks to be re-stacked
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -391,7 +390,7 @@ pub trait XwmHandler {
     fn disconnected(&mut self, _xwm: XwmId) {}
 }
 
-/// The runtime state of an reparenting XWayland window manager.
+/// The runtime state of a reparenting XWayland window manager.
 #[derive(Debug)]
 pub struct X11Wm {
     id: XwmId,
@@ -423,7 +422,6 @@ impl Drop for X11Wm {
     fn drop(&mut self) {
         // TODO: Not really needed for Xwayland, but maybe cleanup set root properties?
         let _ = self.conn.destroy_window(self.wm_window);
-        xwm_id::remove(self.id.0);
     }
 }
 
@@ -711,7 +709,7 @@ impl X11Wm {
         D: xwayland_shell::XWaylandShellHandler,
         D: 'static,
     {
-        let id = XwmId(xwm_id::next());
+        let id = XwmId(XWM_ID_GEN.next());
         let span = debug_span!("xwayland_wm", id = id.0);
         let _guard = span.enter();
 
@@ -1041,7 +1039,7 @@ impl X11Wm {
     ///
     /// So if windows `A -> C` are given in order and the internal stack is `C -> B -> A`,
     /// no reordering will occur.
-    ///  
+    ///
     /// See [`X11Wm::update_stacking_order_downwards`] for a variant of this algorithm,
     /// which works from the top down or [`X11Wm::raise_window`] for an easier but
     /// much more limited way to reorder.

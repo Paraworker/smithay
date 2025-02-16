@@ -8,7 +8,7 @@ use crate::{
         Color32F, Renderer, Texture,
     },
     output::{Output, OutputModeSource, OutputNoMode},
-    utils::{IsAlive, Logical, Point, Rectangle, Scale, Transform},
+    utils::{ids::IdGenerator, IsAlive, Logical, Point, Rectangle, Scale, Transform},
 };
 #[cfg(feature = "wayland_frontend")]
 use crate::{
@@ -32,7 +32,7 @@ pub use self::element::*;
 use self::output::*;
 pub use self::utils::*;
 
-crate::utils::ids::id_gen!(space_id);
+static SPACE_ID_GEN: IdGenerator = IdGenerator::new();
 
 #[derive(Debug)]
 struct InnerElement<E> {
@@ -41,7 +41,11 @@ struct InnerElement<E> {
     outputs: HashMap<Output, Rectangle<i32, Logical>>,
 }
 
-/// Represents two dimensional plane to map windows and outputs upon.
+/// Id of a [`Space`]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SpaceId(u64);
+
+/// Represents two-dimensional plane to map windows and outputs upon.
 ///
 /// Space is generic over the types of elements mapped onto it.
 /// The simplest usecase is a `Space<Window>`, but other types can be used
@@ -49,7 +53,7 @@ struct InnerElement<E> {
 /// an enum by using the [`space_elements!`]-macro.
 #[derive(Debug)]
 pub struct Space<E: SpaceElement> {
-    pub(super) id: usize,
+    pub(super) id: SpaceId,
     // in z-order, back to front
     elements: Vec<InnerElement<E>>,
     outputs: Vec<Output>,
@@ -63,18 +67,11 @@ impl<E: SpaceElement> PartialEq for Space<E> {
     }
 }
 
-impl<E: SpaceElement> Drop for Space<E> {
-    #[inline]
-    fn drop(&mut self) {
-        space_id::remove(self.id);
-    }
-}
-
 impl<E: SpaceElement> Default for Space<E> {
     #[inline]
     fn default() -> Self {
-        let id = space_id::next();
-        let span = debug_span!("desktop_space", id);
+        let id = SpaceId(SPACE_ID_GEN.next());
+        let span = debug_span!("desktop_space", id = id.0);
 
         Self {
             id,
@@ -87,7 +84,7 @@ impl<E: SpaceElement> Default for Space<E> {
 
 impl<E: SpaceElement + PartialEq> Space<E> {
     /// Gets the id of this space
-    pub fn id(&self) -> usize {
+    pub fn id(&self) -> SpaceId {
         self.id
     }
 
@@ -97,7 +94,7 @@ impl<E: SpaceElement + PartialEq> Space<E> {
     /// to update its location inside the space.
     ///
     /// If activate is true it will set the new windows state
-    /// to be activate and removes that state from every
+    /// to be activated and removes that state from every
     /// other mapped window.
     pub fn map_element<P>(&mut self, element: E, location: P, activate: bool)
     where
@@ -123,7 +120,7 @@ impl<E: SpaceElement + PartialEq> Space<E> {
     /// This function does nothing for unmapped windows.
     ///
     /// If activate is true it will set the new windows state
-    /// to be activate and removes that state from every
+    /// to be activated and removes that state from every
     /// other mapped window.
     pub fn raise_element(&mut self, element: &E, activate: bool) {
         if let Some(pos) = self.elements.iter().position(|inner| &inner.element == element) {

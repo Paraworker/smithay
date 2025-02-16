@@ -1,13 +1,14 @@
 use crate::{
+    desktop::space::SpaceId,
     output::Output,
     utils::{Logical, Point},
 };
 
 use std::{collections::HashMap, sync::Mutex};
 
-type OutputUserdata = Mutex<HashMap<usize, Point<i32, Logical>>>;
+type OutputUserdata = Mutex<HashMap<SpaceId, Point<i32, Logical>>>;
 
-pub fn set_output_location(space: usize, o: &Output, new_loc: impl Into<Option<Point<i32, Logical>>>) {
+pub fn set_output_location(space: SpaceId, o: &Output, new_loc: impl Into<Option<Point<i32, Logical>>>) {
     let userdata = o.user_data();
     userdata.insert_if_missing_threadsafe(OutputUserdata::default);
 
@@ -27,7 +28,7 @@ pub fn set_output_location(space: usize, o: &Output, new_loc: impl Into<Option<P
     };
 }
 
-pub fn output_location(space: usize, o: &Output) -> Point<i32, Logical> {
+pub fn output_location(space: SpaceId, o: &Output) -> Point<i32, Logical> {
     let userdata = o.user_data();
     userdata.insert_if_missing_threadsafe(OutputUserdata::default);
     *userdata
