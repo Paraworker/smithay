@@ -1030,7 +1030,7 @@ where
     }
 }
 
-static MAX_CPU_COPIES: usize = 3; // TODO, benchmark this
+const MAX_CPU_COPIES: usize = 3; // TODO, benchmark this
 
 impl<'render, 'target, R: GraphicsApi, T: GraphicsApi> RendererSuper for MultiRenderer<'render, 'target, R, T>
 where
@@ -1043,6 +1043,7 @@ where
     <<R::Device as ApiDevice>::Renderer as RendererSuper>::Error: 'static,
     <<T::Device as ApiDevice>::Renderer as RendererSuper>::Error: 'static,
 {
+    type RendererId = <<R::Device as ApiDevice>::Renderer as RendererSuper>::RendererId;
     type Error = Error<R, T>;
     type TextureId = MultiTexture;
     type Framebuffer<'buffer> = MultiFramebuffer<'buffer, R, T>;
@@ -1064,7 +1065,7 @@ where
     <<R::Device as ApiDevice>::Renderer as RendererSuper>::Error: 'static,
     <<T::Device as ApiDevice>::Renderer as RendererSuper>::Error: 'static,
 {
-    fn id(&self) -> usize {
+    fn id(&self) -> Self::RendererId {
         self.render.renderer().id()
     }
 
@@ -1810,10 +1811,11 @@ where
     <<R::Device as ApiDevice>::Renderer as RendererSuper>::Error: 'static,
     <<T::Device as ApiDevice>::Renderer as RendererSuper>::Error: 'static,
 {
+    type RendererId = <<R::Device as ApiDevice>::Renderer as RendererSuper>::RendererId;
     type TextureId = MultiTexture;
     type Error = Error<R, T>;
 
-    fn id(&self) -> usize {
+    fn id(&self) -> Self::RendererId {
         self.frame.as_ref().unwrap().id()
     }
 

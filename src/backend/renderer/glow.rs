@@ -200,6 +200,7 @@ impl<'frame, 'buffer> BorrowMut<GlesFrame<'frame, 'buffer>> for GlowFrame<'frame
 }
 
 impl RendererSuper for GlowRenderer {
+    type RendererId = GlesRendererId;
     type Error = GlesError;
     type TextureId = GlesTexture;
     type Frame<'frame, 'buffer>
@@ -211,7 +212,7 @@ impl RendererSuper for GlowRenderer {
 }
 
 impl Renderer for GlowRenderer {
-    fn id(&self) -> usize {
+    fn id(&self) -> Self::RendererId {
         self.gl.id()
     }
 
@@ -259,10 +260,11 @@ impl Renderer for GlowRenderer {
 }
 
 impl Frame for GlowFrame<'_, '_> {
+    type RendererId = GlesRendererId;
     type TextureId = GlesTexture;
     type Error = GlesError;
 
-    fn id(&self) -> usize {
+    fn id(&self) -> Self::RendererId {
         self.frame.as_ref().unwrap().id()
     }
 

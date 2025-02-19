@@ -15,7 +15,7 @@ use crate::{
         format::{has_alpha, FormatSet},
         Buffer,
     },
-    utils::{Buffer as BufferCoords, Physical, Rectangle, Scale, Size, Transform},
+    utils::{ids::IdGenerator, Buffer as BufferCoords, Physical, Rectangle, Scale, Size, Transform},
 };
 
 #[cfg(feature = "wayland_frontend")]
@@ -61,6 +61,12 @@ const SUPPORTED_FORMATS: &[DrmFourcc] = &[
     #[cfg(target_endian = "little")]
     DrmFourcc::Abgr2101010,
 ];
+
+static RENDERER_ID_GEN: IdGenerator = IdGenerator::new();
+
+/// Id of a [`PixmanRenderer`]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct PixmanRendererId(u64);
 
 /// A framebuffer of an [`PixmanRenderer`].
 #[derive(Debug)]
@@ -352,12 +358,14 @@ impl PixmanFrame<'_, '_> {
 }
 
 impl Frame for PixmanFrame<'_, '_> {
+    type RendererId = PixmanRendererId;
+
     type Error = PixmanError;
 
     type TextureId = PixmanTexture;
 
-    fn id(&self) -> usize {
-        0
+    fn id(&self) -> Self::RendererId {
+        self.renderer.id
     }
 
     #[profiling::function]
@@ -690,6 +698,7 @@ impl Drop for PixmanFrame<'_, '_> {
 /// A renderer utilizing pixman
 #[derive(Debug)]
 pub struct PixmanRenderer {
+    id: PixmanRendererId,
     downscale_filter: TextureFilter,
     upscale_filter: TextureFilter,
     debug_flags: DebugFlags,
@@ -705,6 +714,7 @@ impl PixmanRenderer {
     pub fn new() -> Result<Self, PixmanError> {
         let tint = pixman::Solid::new([0.0, 0.2, 0.0, 0.2]).map_err(|_| PixmanError::Unsupported)?;
         Ok(Self {
+            id: PixmanRendererId(RENDERER_ID_GEN.next()),
             downscale_filter: TextureFilter::Linear,
             upscale_filter: TextureFilter::Linear,
             debug_flags: DebugFlags::empty(),
@@ -808,6 +818,7 @@ impl PixmanRenderer {
 }
 
 impl RendererSuper for PixmanRenderer {
+    type RendererId = PixmanRendererId;
     type Error = PixmanError;
     type TextureId = PixmanTexture;
     type Framebuffer<'buffer> = PixmanTarget<'buffer>;
@@ -818,8 +829,8 @@ impl RendererSuper for PixmanRenderer {
 }
 
 impl Renderer for PixmanRenderer {
-    fn id(&self) -> usize {
-        0
+    fn id(&self) -> Self::RendererId {
+        self.id
     }
 
     fn downscale_filter(&mut self, filter: TextureFilter) -> Result<(), Self::Error> {

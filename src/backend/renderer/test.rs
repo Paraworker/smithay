@@ -23,13 +23,29 @@ use crate::{
         },
         SwapBuffersError,
     },
-    utils::{Buffer, Physical, Rectangle, Size, Transform},
+    utils::{ids::IdGenerator, Buffer, Physical, Rectangle, Size, Transform},
 };
 
 use super::Color32F;
 
-#[derive(Debug, Default)]
-pub struct DummyRenderer;
+static RENDERER_ID_GEN: IdGenerator = IdGenerator::new();
+
+/// Id of a [`DummyRenderer`]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct DummyRendererId(u64);
+
+#[derive(Debug)]
+pub struct DummyRenderer {
+    id: DummyRendererId,
+}
+
+impl DummyRenderer {
+    pub fn new() -> Self {
+        Self {
+            id: DummyRendererId(RENDERER_ID_GEN.next()),
+        }
+    }
+}
 
 /// Error returned by the DummyRenderer
 #[derive(thiserror::Error, Debug)]
@@ -51,19 +67,20 @@ impl From<DummyError> for SwapBuffersError {
 }
 
 impl RendererSuper for DummyRenderer {
+    type RendererId = DummyRendererId;
     type Error = DummyError;
     type TextureId = DummyTexture;
+    type Framebuffer<'buffer> = DummyFramebuffer;
     type Frame<'frame, 'buffer>
-        = DummyFrame
+        = DummyFrame<'frame>
     where
         'buffer: 'frame,
         Self: 'frame;
-    type Framebuffer<'buffer> = DummyFramebuffer;
 }
 
 impl Renderer for DummyRenderer {
-    fn id(&self) -> usize {
-        0
+    fn id(&self) -> Self::RendererId {
+        self.id
     }
 
     fn render<'frame, 'buffer>(
@@ -75,7 +92,7 @@ impl Renderer for DummyRenderer {
     where
         'buffer: 'frame,
     {
-        Ok(DummyFrame {})
+        Ok(DummyFrame { renderer: self })
     }
 
     fn upscale_filter(&mut self, _filter: TextureFilter) -> Result<(), Self::Error> {
@@ -224,14 +241,17 @@ impl Texture for DummyFramebuffer {
 }
 
 #[derive(Debug)]
-pub struct DummyFrame {}
+pub struct DummyFrame<'frame> {
+    renderer: &'frame mut DummyRenderer,
+}
 
 impl Frame for DummyFrame {
+    type RendererId = DummyRendererId;
     type Error = DummyError;
     type TextureId = DummyTexture;
 
-    fn id(&self) -> usize {
-        0
+    fn id(&self) -> Self::RendererId {
+        self.renderer.id
     }
 
     fn clear(&mut self, _color: Color32F, _damage: &[Rectangle<i32, Physical>]) -> Result<(), Self::Error> {
