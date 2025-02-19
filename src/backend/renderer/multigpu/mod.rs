@@ -980,6 +980,7 @@ where
     <<R::Device as ApiDevice>::Renderer as Renderer>::Error: 'static,
     <<T::Device as ApiDevice>::Renderer as Renderer>::Error: 'static,
 {
+    type RendererId = <<R::Device as ApiDevice>::Renderer as Renderer>::RendererId;
     type Error = Error<R, T>;
     type TextureId = MultiTexture;
     type Frame<'frame>
@@ -987,7 +988,7 @@ where
     where
         Self: 'frame;
 
-    fn id(&self) -> usize {
+    fn id(&self) -> Self::RendererId {
         self.render.renderer().id()
     }
 
@@ -1644,10 +1645,11 @@ where
     <<R::Device as ApiDevice>::Renderer as Renderer>::Error: 'static,
     <<T::Device as ApiDevice>::Renderer as Renderer>::Error: 'static,
 {
+    type RendererId = <<R::Device as ApiDevice>::Renderer as Renderer>::RendererId;
     type TextureId = MultiTexture;
     type Error = Error<R, T>;
 
-    fn id(&self) -> usize {
+    fn id(&self) -> Self::RendererId {
         self.frame.as_ref().unwrap().id()
     }
 

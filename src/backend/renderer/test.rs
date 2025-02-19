@@ -22,17 +22,27 @@ use crate::{
         },
         SwapBuffersError,
     },
-    utils::{Buffer, Physical, Rectangle, Size, Transform},
+    utils::{ids::IdGenerator, Buffer, Physical, Rectangle, Size, Transform},
 };
 
 use super::Color32F;
 
+static RENDERER_ID_GEN: IdGenerator = IdGenerator::new();
+
+/// Id of a [`DummyRenderer`]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct DummyRendererId(u64);
+
 #[derive(Debug)]
-pub struct DummyRenderer {}
+pub struct DummyRenderer {
+    id: DummyRendererId,
+}
 
 impl DummyRenderer {
     pub fn new() -> DummyRenderer {
-        DummyRenderer {}
+        DummyRenderer {
+            id: DummyRendererId(RENDERER_ID_GEN.next()),
+        }
     }
 }
 
@@ -62,20 +72,23 @@ impl From<DummyError> for SwapBuffersError {
 }
 
 impl Renderer for DummyRenderer {
+    type RendererId = DummyRendererId;
     type Error = DummyError;
     type TextureId = DummyTexture;
-    type Frame<'a> = DummyFrame;
+    type Frame<'a> = DummyFrame<'a>;
 
-    fn id(&self) -> usize {
-        0
+    fn id(&self) -> Self::RendererId {
+        self.id
     }
 
     fn render(
         &mut self,
         _size: Size<i32, Physical>,
         _dst_transform: Transform,
-    ) -> Result<DummyFrame, Self::Error> {
-        Ok(DummyFrame {})
+    ) -> Result<DummyFrame<'_>, Self::Error> {
+        Ok(DummyFrame {
+            renderer: self,
+        })
     }
 
     fn upscale_filter(&mut self, _filter: TextureFilter) -> Result<(), Self::Error> {
@@ -207,14 +220,17 @@ impl ImportEgl for DummyRenderer {
 impl ImportDmaWl for DummyRenderer {}
 
 #[derive(Debug)]
-pub struct DummyFrame {}
+pub struct DummyFrame<'frame> {
+    renderer: &'frame mut DummyRenderer,
+}
 
 impl Frame for DummyFrame {
+    type RendererId = DummyRendererId;
     type Error = DummyError;
     type TextureId = DummyTexture;
 
-    fn id(&self) -> usize {
-        0
+    fn id(&self) -> Self::RendererId {
+        self.renderer.id
     }
 
     fn clear(&mut self, _color: Color32F, _damage: &[Rectangle<i32, Physical>]) -> Result<(), Self::Error> {

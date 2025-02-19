@@ -5,7 +5,9 @@ use core::slice;
 use std::{
     collections::HashMap,
     ffi::{CStr, CString},
-    fmt, mem,
+    fmt,
+    marker::PhantomData,
+    mem,
     os::raw::c_char,
     ptr,
     rc::Rc,
@@ -75,7 +77,9 @@ pub mod ffi {
 
 static RENDERER_ID_GEN: IdGenerator = IdGenerator::new();
 
-struct RendererId(u64);
+/// Id of a [`GlesRenderer`]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GlesRendererId(u64);
 
 enum CleanupResource {
     Texture(ffi::types::GLuint),
@@ -278,7 +282,7 @@ pub struct GlesRenderer {
     destruction_callback_sender: Sender<CleanupResource>,
 
     // markers
-    _not_send: *mut (),
+    _not_send: PhantomData<*mut ()>,
 
     // debug
     span: tracing::Span,
@@ -573,7 +577,7 @@ impl GlesRenderer {
 
         context
             .user_data()
-            .insert_if_missing_threadsafe(|| RendererId(RENDERER_ID_GEN.next()));
+            .insert_if_missing_threadsafe(|| GlesRendererId(RENDERER_ID_GEN.next()));
         drop(_guard);
 
         let renderer = GlesRenderer {
@@ -603,7 +607,7 @@ impl GlesRenderer {
             destruction_callback_sender: tx,
 
             debug_flags: DebugFlags::empty(),
-            _not_send: std::ptr::null_mut(),
+            _not_send: PhantomData,
             span,
             gl_debug_span,
         };
@@ -688,7 +692,7 @@ impl ImportMemWl for GlesRenderer {
 
         // why not store a `GlesTexture`? because the user might do so.
         // this is guaranteed a non-public internal type, so we are good.
-        type CacheMap = HashMap<usize, Arc<GlesTextureInternal>>;
+        type CacheMap = HashMap<GlesRendererId, Arc<GlesTextureInternal>>;
 
         with_buffer_contents(buffer, |ptr, len, data| {
             self.make_current()?;
@@ -1995,12 +1999,13 @@ impl GlesFrame<'_> {
 }
 
 impl Renderer for GlesRenderer {
+    type RendererId = GlesRendererId;
     type Error = GlesError;
     type TextureId = GlesTexture;
     type Frame<'frame> = GlesFrame<'frame>;
 
-    fn id(&self) -> usize {
-        self.egl.user_data().get::<RendererId>().unwrap().0 as usize
+    fn id(&self) -> Self::RendererId {
+        *self.egl.user_data().get::<GlesRendererId>().unwrap()
     }
 
     fn downscale_filter(&mut self, filter: TextureFilter) -> Result<(), Self::Error> {
@@ -2176,10 +2181,11 @@ static OUTPUT_VERTS: [ffi::types::GLfloat; 8] = [
 ];
 
 impl Frame for GlesFrame<'_> {
+    type RendererId = GlesRendererId;
     type TextureId = GlesTexture;
     type Error = GlesError;
 
-    fn id(&self) -> usize {
+    fn id(&self) -> Self::RendererId {
         self.renderer.id()
     }
 

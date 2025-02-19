@@ -15,7 +15,7 @@ use crate::{
         format::{has_alpha, FormatSet},
         Buffer,
     },
-    utils::{Buffer as BufferCoords, Physical, Rectangle, Scale, Size, Transform},
+    utils::{ids::IdGenerator, Buffer as BufferCoords, Physical, Rectangle, Scale, Size, Transform},
 };
 
 #[cfg(feature = "wayland_frontend")]
@@ -61,6 +61,12 @@ const SUPPORTED_FORMATS: &[DrmFourcc] = &[
     #[cfg(target_endian = "little")]
     DrmFourcc::Abgr2101010,
 ];
+
+static RENDERER_ID_GEN: IdGenerator = IdGenerator::new();
+
+/// Id of a [`PixmanRenderer`]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct PixmanRendererId(u64);
 
 #[derive(Debug)]
 enum PixmanTarget {
@@ -324,12 +330,14 @@ impl PixmanFrame<'_> {
 }
 
 impl Frame for PixmanFrame<'_> {
+    type RendererId = PixmanRendererId;
+
     type Error = PixmanError;
 
     type TextureId = PixmanTexture;
 
-    fn id(&self) -> usize {
-        0
+    fn id(&self) -> Self::RendererId {
+        self.renderer.id
     }
 
     #[profiling::function]
@@ -664,6 +672,7 @@ impl Drop for PixmanFrame<'_> {
 /// A renderer utilizing pixman
 #[derive(Debug)]
 pub struct PixmanRenderer {
+    id: PixmanRendererId,
     target: Option<PixmanTarget>,
     downscale_filter: TextureFilter,
     upscale_filter: TextureFilter,
@@ -680,6 +689,7 @@ impl PixmanRenderer {
     pub fn new() -> Result<Self, PixmanError> {
         let tint = pixman::Solid::new([0.0, 0.2, 0.0, 0.2]).map_err(|_| PixmanError::Unsupported)?;
         Ok(Self {
+            id: PixmanRendererId(RENDERER_ID_GEN.next()),
             target: None,
             downscale_filter: TextureFilter::Linear,
             upscale_filter: TextureFilter::Linear,
@@ -784,14 +794,16 @@ impl PixmanRenderer {
 }
 
 impl Renderer for PixmanRenderer {
+    type RendererId = PixmanRendererId;
+
     type Error = PixmanError;
 
     type TextureId = PixmanTexture;
 
     type Frame<'frame> = PixmanFrame<'frame>;
 
-    fn id(&self) -> usize {
-        0
+    fn id(&self) -> Self::RendererId {
+        self.id
     }
 
     fn downscale_filter(&mut self, filter: TextureFilter) -> Result<(), Self::Error> {

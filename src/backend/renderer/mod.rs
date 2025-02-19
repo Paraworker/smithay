@@ -124,7 +124,7 @@ pub trait Unbind: Renderer {
     fn unbind(&mut self) -> Result<(), <Self as Renderer>::Error>;
 }
 
-/// A two dimensional texture
+/// A two-dimensional texture
 pub trait Texture: fmt::Debug {
     /// Size of the texture plane
     fn size(&self) -> Size<i32, BufferCoord> {
@@ -163,6 +163,8 @@ pub trait TextureMapping: Texture {
 /// Dropping the [`Frame`] or explicitly calling [`Frame::finish`] will free any unused resources. If you need explicit control
 /// over resource clean-up take a look at [`Renderer::cleanup_texture_cache`].
 pub trait Frame {
+    /// Id type of this renderer.
+    type RendererId;
     /// Error type returned by the rendering operations of this renderer.
     type Error: Error;
     /// Texture Handle type used by this renderer.
@@ -170,7 +172,7 @@ pub trait Frame {
 
     /// Returns an id, that is unique to all renderers, that can use
     /// `TextureId`s originating from any of these renderers.
-    fn id(&self) -> usize;
+    fn id(&self) -> Self::RendererId;
 
     /// Clear the complete current target with a single given color.
     ///
@@ -263,20 +265,24 @@ bitflags::bitflags! {
         const TINT = 0b00000001;
     }
 }
+
 /// Abstraction of commonly used rendering operations for compositors.
 pub trait Renderer: fmt::Debug {
+    /// Id type of this renderer.
+    type RendererId;
     /// Error type returned by the rendering operations of this renderer.
     type Error: Error;
     /// Texture Handle type used by this renderer.
     type TextureId: Texture;
     /// Type representing a currently in-progress frame during the [`Renderer::render`]-call
-    type Frame<'frame>: Frame<Error = Self::Error, TextureId = Self::TextureId> + 'frame
+    type Frame<'frame>: Frame<RendererId = Self::RendererId, Error = Self::Error, TextureId = Self::TextureId>
+        + 'frame
     where
         Self: 'frame;
 
     /// Returns an id, that is unique to all renderers, that can use
     /// `TextureId`s originating from any of these renderers.
-    fn id(&self) -> usize;
+    fn id(&self) -> Self::RendererId;
 
     /// Set the filter method to be used when rendering a texture into a smaller area than its size
     fn downscale_filter(&mut self, filter: TextureFilter) -> Result<(), Self::Error>;
