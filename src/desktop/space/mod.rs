@@ -34,6 +34,10 @@ pub use self::utils::*;
 
 static SPACE_ID_GEN: IdGenerator = IdGenerator::new();
 
+/// Id of a [`Space`]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SpaceId(u64);
+
 #[derive(Debug)]
 struct InnerElement<E> {
     element: E,
@@ -49,7 +53,7 @@ struct InnerElement<E> {
 /// an enum by using the [`space_elements!`]-macro.
 #[derive(Debug)]
 pub struct Space<E: SpaceElement> {
-    pub(super) id: usize,
+    pub(super) id: SpaceId,
     // in z-order, back to front
     elements: Vec<InnerElement<E>>,
     outputs: Vec<Output>,
@@ -66,8 +70,8 @@ impl<E: SpaceElement> PartialEq for Space<E> {
 impl<E: SpaceElement> Default for Space<E> {
     #[inline]
     fn default() -> Self {
-        let id = SPACE_ID_GEN.next() as usize;
-        let span = debug_span!("desktop_space", id);
+        let id = SpaceId(SPACE_ID_GEN.next());
+        let span = debug_span!("desktop_space", id = id.0);
 
         Self {
             id,
@@ -80,7 +84,7 @@ impl<E: SpaceElement> Default for Space<E> {
 
 impl<E: SpaceElement + PartialEq> Space<E> {
     /// Gets the id of this space
-    pub fn id(&self) -> usize {
+    pub fn id(&self) -> SpaceId {
         self.id
     }
 
@@ -247,7 +251,7 @@ impl<E: SpaceElement + PartialEq> Space<E> {
     /// Can be safely called on an already mapped
     /// [`Output`] to update its location.
     ///
-    /// *Note:* Remapping an output does reset it's damage memory.
+    /// *Note:* Remapping an output does reset its damage memory.
     pub fn map_output<P: Into<Point<i32, Logical>>>(&mut self, output: &Output, location: P) {
         let location = location.into();
         set_output_location(self.id, output, location);
