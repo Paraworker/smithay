@@ -133,7 +133,7 @@ impl RenderElement<GlesRenderer> for PixelShaderElement {
 /// Render element for drawing with a gles2 texture shader
 #[derive(Debug)]
 pub struct TextureShaderElement {
-    inner: TextureRenderElement<GlesTexture>,
+    inner: TextureRenderElement<GlesRenderer, GlesTexture>,
     program: GlesTexProgram,
     id: Id,
     additional_uniforms: Vec<Uniform<'static>>,
@@ -144,7 +144,7 @@ impl TextureShaderElement {
     /// [`GlesTexProgram`], which can be constructed using
     /// [`GlesRenderer::compile_custom_texture_shader`]
     pub fn new(
-        inner: TextureRenderElement<GlesTexture>,
+        inner: TextureRenderElement<GlesRenderer, GlesTexture>,
         program: GlesTexProgram,
         additional_uniforms: Vec<Uniform<'_>>,
     ) -> Self {

@@ -7,9 +7,7 @@
 //!
 //! - Raw OpenGL ES 2
 
-use std::error::Error;
-use std::fmt;
-
+use std::{error::Error, fmt::Debug};
 use crate::utils::{Buffer as BufferCoord, Physical, Point, Rectangle, Scale, Size, Transform};
 use cgmath::Matrix3;
 
@@ -122,7 +120,7 @@ pub trait Bind<Target>: Renderer {
 }
 
 /// A two-dimensional texture
-pub trait Texture: fmt::Debug {
+pub trait Texture: Debug {
     /// Size of the texture plane
     fn size(&self) -> Size<i32, BufferCoord> {
         Size::from((self.width() as i32, self.height() as i32))
@@ -161,7 +159,7 @@ pub trait TextureMapping: Texture {
 /// over resource clean-up take a look at [`Renderer::cleanup_texture_cache`].
 pub trait Frame {
     /// Id type of this renderer.
-    type RendererId;
+    type RendererId: Clone + Debug + Eq;
     /// Error type returned by the rendering operations of this renderer.
     type Error: Error;
     /// Texture Handle type used by this renderer.
@@ -264,9 +262,9 @@ bitflags::bitflags! {
 }
 
 /// Workaround for <https://github.com/rust-lang/rust/issues/87479>, please look at [`Renderer`] instead.
-pub trait RendererSuper: fmt::Debug {
+pub trait RendererSuper: Debug {
     /// Id type of this renderer.
-    type RendererId;
+    type RendererId: Clone + Debug + Eq;
     /// Error type returned by the rendering operations of this renderer.
     type Error: Error;
     /// Texture Handle type used by this renderer.

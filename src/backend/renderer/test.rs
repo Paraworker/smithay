@@ -245,7 +245,7 @@ pub struct DummyFrame<'frame> {
     renderer: &'frame mut DummyRenderer,
 }
 
-impl Frame for DummyFrame {
+impl Frame for DummyFrame<'_> {
     type RendererId = DummyRendererId;
     type Error = DummyError;
     type TextureId = DummyTexture;
