@@ -26,10 +26,20 @@ use crate::{
     utils::{Buffer, Physical, Rectangle, Size, Transform},
 };
 
-use super::Color32F;
+use super::{Color32F, RendererId};
 
-#[derive(Debug, Default)]
-pub struct DummyRenderer;
+#[derive(Debug)]
+pub struct DummyRenderer {
+    id: RendererId,
+}
+
+impl Default for DummyRenderer {
+    fn default() -> Self {
+        Self {
+            id: RendererId::next(),
+        }
+    }
+}
 
 /// Error returned by the DummyRenderer
 #[derive(thiserror::Error, Debug)]
@@ -62,8 +72,8 @@ impl RendererSuper for DummyRenderer {
 }
 
 impl Renderer for DummyRenderer {
-    fn id(&self) -> usize {
-        0
+    fn id(&self) -> RendererId {
+        self.id.clone()
     }
 
     fn render<'frame, 'buffer>(
@@ -75,7 +85,7 @@ impl Renderer for DummyRenderer {
     where
         'buffer: 'frame,
     {
-        Ok(DummyFrame {})
+        Ok(DummyFrame { id: self.id() })
     }
 
     fn upscale_filter(&mut self, _filter: TextureFilter) -> Result<(), Self::Error> {
@@ -224,14 +234,16 @@ impl Texture for DummyFramebuffer {
 }
 
 #[derive(Debug)]
-pub struct DummyFrame {}
+pub struct DummyFrame {
+    id: RendererId,
+}
 
 impl Frame for DummyFrame {
     type Error = DummyError;
     type TextureId = DummyTexture;
 
-    fn id(&self) -> usize {
-        0
+    fn id(&self) -> RendererId {
+        self.id.clone()
     }
 
     fn clear(&mut self, _color: Color32F, _damage: &[Rectangle<i32, Physical>]) -> Result<(), Self::Error> {
